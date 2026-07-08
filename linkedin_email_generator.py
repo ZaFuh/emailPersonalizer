@@ -6,8 +6,10 @@ Uses Groq API (free) to generate personalized outreach emails for LinkedIn profi
 
 import json
 import sys
+import csv
 from datetime import datetime
 import os
+from urllib.parse import urlparse
 
 try:
     from groq import Groq
@@ -35,28 +37,75 @@ Have a wonderful week!"""
 
 def load_linkedin_profiles(file_path):
     """
-    Load LinkedIn profiles from a JSON file.
-    Expected format:
-    [
-        {
-            "name": "John Doe",
-            "headline": "Marketing Manager at XYZ Corp",
-            "about": "Passionate about branding...",
-            "company": "XYZ Corp",
-            "profile_url": "https://linkedin.com/in/johndoe"
-        },
-        ...
-    ]
+    Load LinkedIn profiles from a CSV file.
+    Expected format (column names):
+    - Lead Name (or Name)
+    - Company Name (or Company)
+    - Linkedin (or LinkedIn URL)
+    
+    Other columns are ignored.
     """
     try:
+        profiles = []
         with open(file_path, 'r', encoding='utf-8') as f:
-            profiles = json.load(f)
+            reader = csv.DictReader(f)
+            
+            if reader.fieldnames is None:
+                print(f"Error: CSV file '{file_path}' is empty.")
+                sys.exit(1)
+            
+            # Find the correct column names (case-insensitive)
+            fieldnames = {field.lower(): field for field in reader.fieldnames}
+            
+            # Identify column names
+            name_col = None
+            company_col = None
+            linkedin_col = None
+            
+            for key in fieldnames:
+                if 'name' in key and 'lead' in key:
+                    name_col = fieldnames[key]
+                elif 'name' in key and name_col is None:
+                    name_col = fieldnames[key]
+                elif 'company' in key:
+                    company_col = fieldnames[key]
+                elif 'linkedin' in key:
+                    linkedin_col = fieldnames[key]
+            
+            if not name_col:
+                print("Error: CSV must have a 'Lead Name' or 'Name' column.")
+                sys.exit(1)
+            if not company_col:
+                print("Error: CSV must have a 'Company Name' or 'Company' column.")
+                sys.exit(1)
+            if not linkedin_col:
+                print("Error: CSV must have a 'Linkedin' or 'LinkedIn' column.")
+                sys.exit(1)
+            
+            for row in reader:
+                name = row[name_col].strip()
+                company = row[company_col].strip()
+                linkedin_url = row[linkedin_col].strip()
+                
+                # Skip empty rows
+                if not name or not company:
+                    continue
+                
+                profile = {
+                    "name": name,
+                    "company": company,
+                    "profile_url": linkedin_url,
+                    "headline": f"Professional at {company}",
+                    "about": f"Connected on LinkedIn at {linkedin_url}"
+                }
+                profiles.append(profile)
+        
         return profiles
     except FileNotFoundError:
         print(f"Error: File '{file_path}' not found.")
         sys.exit(1)
-    except json.JSONDecodeError:
-        print(f"Error: Invalid JSON in '{file_path}'.")
+    except Exception as e:
+        print(f"Error reading CSV file '{file_path}': {str(e)}")
         sys.exit(1)
 
 
@@ -150,7 +199,7 @@ def main():
     if len(sys.argv) > 1:
         input_file = sys.argv[1]
     else:
-        input_file = "linkedin_profiles.json"
+        input_file = "linkedin_profiles.csv"
     
     print(f"Loading LinkedIn profiles from '{input_file}'...")
     profiles = load_linkedin_profiles(input_file)
